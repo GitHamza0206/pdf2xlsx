@@ -2,7 +2,8 @@ import streamlit as st
 import pandas as pd
 import io 
 import base64
-import pdfplumber 
+import camelot 
+
 
 def get_table_download_link(df, file_format, filename):
     filename = filename.split('.')[0]
@@ -12,11 +13,11 @@ def get_table_download_link(df, file_format, filename):
         href = f'<a href="data:file/csv;base64,{b64}" download="'+filename+'.csv">Download Data as CSV</a>'
     elif file_format == 'Excel':
         output = io.BytesIO()
-        writer = pd.ExcelWriter(output, engine='xlsxwriter')
-        excel = df.to_excel(writer,index=False)
-        writer.save()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, sheet_name='Sheet1', index=False)
         excel_data = output.getvalue()
         b64 = base64.b64encode(excel_data).decode() 
+        #href = f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="{filename}" target="_blank">{text}</a>'
         href = f'<a href="data:file/excel;base64,{b64}" download="'+filename+'.xlsx">Download Data as Excel</a>'
     return href
 
@@ -47,6 +48,9 @@ def extract_tables(pdf_file):
 def concatenated_data(tables):
     return pd.concat(tables, ignore_index=True)
 
+def extract_table_camelot(pdf_file):
+    return camelot.read_pdf(pdf_file,pages="all",flavor='stream')
+
 
 # Title of the Web App
 st.title('PDF Table Extractor')
@@ -64,16 +68,24 @@ if uploaded_file is not None:
         # Display the PDF
         display_pdf("temp.pdf")
 
-        extracted_table = extract_tables('temp.pdf')
+        extracted_table = extract_table_camelot('temp.pdf')
 
+        dfs= []
         for i,df in enumerate(extracted_table):
-            #df = extracted_table[0] # Get the first table
-            st.write(f'page {i}')
-            st.dataframe(df) # Display the table
+            df = extracted_table[i].df # Get the first table
+            dfs.append(df)
+            #st.write(f'page {i}')
+            #st.dataframe(df,use_container_width=True) # Display the table
 
-        st.write('concatenated data')
-        concatenated_tables = concatenated_data(extracted_table)
-        st.dataframe(concatenated_tables)
+
+        st.markdown("""
+        <div style="text-align: center; color: blue; font-size: 24px; font-weight: bold;">
+            Excel result
+        </div>
+        """, unsafe_allow_html=True)
+
+        concatenated_tables = concatenated_data(dfs)
+        st.dataframe(concatenated_tables,use_container_width=True)
 
         # Choose file format to download
         file_format = st.selectbox('Select file format to download:', ('CSV', 'Excel'))
